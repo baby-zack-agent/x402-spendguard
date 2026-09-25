@@ -1,0 +1,5 @@
+node_modules/
+audit.log
+example-audit.log
+policy.json
+.DS_Store

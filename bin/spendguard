@@ -1,0 +1,97 @@
+#!/usr/bin/env node
+'use strict';
+// spendguard CLI: init | check | audit
+//   init  — scaffold a policy.json in the current directory
+//   check — dry-run a payment decision (does NOT write to the audit trail)
+//   audit — read the trail, optionally filtered by agent, and verify integrity
+const fs = require('node:fs');
+const path = require('node:path');
+const { loadPolicy, effectivePolicy, DEFAULTS } = require('../lib/policy');
+const { decide } = require('../lib/decide');
+const audit = require('../lib/audit');
+
+const EXIT = { allow: 0, deny: 1, needs_approval: 2 };
+
+function parseArgs(argv) {
+  const out = { _: [] };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith('--')) {
+      const key = a.slice(2);
+      const next = argv[i + 1];
+      if (next && !next.startsWith('--')) {
+        out[key] = next;
+        i++;
+      } else {
+        out[key] = true;
+      }
+    } else {
+      out._.push(a);
+    }
+  }
+  return out;
+}
+
+function cmdInit(args) {
+  const dest = path.resolve(args.policy || './policy.json');
+  if (fs.existsSync(dest) && !args.force) {
+    console.error(`refusing to overwrite existing ${dest} (use --force)`);
+    process.exit(1);
+  }
+  const scaffold = {
+    version: 1,
+    defaults: { ...DEFAULTS },
+    agents: {
+      'example-agent': {
+        dailyCap: 10,
+        perTxCap: 5,
+        approvalThreshold: 25,
+      },
+    },
+  };
+  fs.writeFileSync(dest, JSON.stringify(scaffold, null, 2) + '\n');
+  console.log(`wrote ${dest} — edit defaults and per-agent overrides, then run: spendguard check`);
+}
+
+function cmdCheck(args) {
+  const agentId = args.agent;
+  const to = args.to;
+  const amountUsd = Number(args.amount);
+  if (!agentId || !to || args.amount === undefined) {
+    console.error('usage: spendguard check --agent <id> --to <address> --amount <usd> [--policy policy.json] [--log audit.log]');
+    process.exit(1);
+  }
+  const policy = loadPolicy(path.resolve(args.policy || './policy.json'));
+  const logPath = path.resolve(args.log || './audit.log');
+  const eff = effectivePolicy(policy, agentId);
+  const usage = audit.usageFor(agentId, logPath);
+  const { decision, reasons } = decide({ agentId, to, amountUsd }, eff, usage);
+  console.log(JSON.stringify({ decision, reasons, usage }, null, 2));
+  process.exit(EXIT[decision]);
+}
+
+function cmdAudit(args) {
+  const logPath = path.resolve(args.log || './audit.log');
+  const records = audit.readRecords(logPath).filter((r) => !args.agent || r.agentId === args.agent);
+  for (const r of records) {
+    console.log(`${r.ts}  ${r.agentId}  -> ${r.to}  $${r.amountUsd}  ${r.decision}${r.reasons.length ? '  [' + r.reasons.join('; ') + ']' : ''}`);
+  }
+  const v = audit.verify(logPath);
+  console.log(`\n${v.ok ? 'OK' : 'FAIL'}: ${v.count} records, chain ${v.ok ? 'intact' : 'BROKEN at line ' + (v.badIndex + 1) + ' (' + v.reason + ')'}`);
+  if (!v.ok) process.exit(1);
+}
+
+function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const cmd = args._[0];
+  if (cmd === 'init') return cmdInit(args);
+  if (cmd === 'check') return cmdCheck(args);
+  if (cmd === 'audit') return cmdAudit(args);
+  console.error('usage: spendguard <init|check|audit> [options]');
+  console.error('  init  [--policy policy.json] [--force]');
+  console.error('  check --agent <id> --to <address> --amount <usd> [--policy p] [--log l]');
+  console.error('  audit [--agent <id>] [--policy p] [--log l]');
+  process.exit(1);
+}
+
+main();
