@@ -3,3 +3,6 @@ audit.log
 example-audit.log
 policy.json
 .DS_Store
+*.ed25519
+*.pem
+receipts/

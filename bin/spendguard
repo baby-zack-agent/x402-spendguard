@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 'use strict';
-// spendguard CLI: init | check | audit
+// spendguard CLI: init | check | audit | keygen | receipt-verify
 //   init  — scaffold a policy.json in the current directory
 //   check — dry-run a payment decision (does NOT write to the audit trail)
 //   audit — read the trail, optionally filtered by agent, and verify integrity
+//   keygen — generate an Ed25519 keypair for signing receipts (private key stays local)
+//   receipt-verify — verify a signed attestation receipt against a public key
 const fs = require('node:fs');
 const path = require('node:path');
 const { loadPolicy, effectivePolicy, DEFAULTS } = require('../lib/policy');
 const { decide } = require('../lib/decide');
 const audit = require('../lib/audit');
+const attest = require('../lib/attest');
 
 const EXIT = { allow: 0, deny: 1, needs_approval: 2 };
 
@@ -81,16 +84,50 @@ function cmdAudit(args) {
   if (!v.ok) process.exit(1);
 }
 
+function cmdKeygen(args) {
+  const { publicKey, privateKey } = attest.keygen();
+  const pubDest = path.resolve(args.pub || './agent.ed25519.pub');
+  const privDest = path.resolve(args.priv || './agent.ed25519');
+  if ((fs.existsSync(pubDest) || fs.existsSync(privDest)) && !args.force) {
+    console.error('refusing to overwrite existing key files (use --force)');
+    process.exit(1);
+  }
+  fs.writeFileSync(pubDest, publicKey, { mode: 0o644 });
+  fs.writeFileSync(privDest, privateKey, { mode: 0o600 });
+  console.log(`public key -> ${pubDest}  (safe to publish)`);
+  console.log(`private key -> ${privDest} (mode 0600, NEVER commit or share)`);
+}
+
+function cmdReceiptVerify(args) {
+  const receiptPath = args._[1];
+  const pubPath = args.pubkey;
+  if (!receiptPath || !pubPath) {
+    console.error('usage: spendguard receipt-verify <receipt.json> --pubkey <public.pem> [--log audit.log]');
+    process.exit(1);
+  }
+  const receipt = JSON.parse(fs.readFileSync(path.resolve(receiptPath), 'utf8'));
+  const pub = fs.readFileSync(path.resolve(pubPath), 'utf8');
+  const v = args.log
+    ? attest.verifyAgainstLog(receipt, pub, path.resolve(args.log))
+    : attest.verify(receipt, pub);
+  console.log(JSON.stringify(v, null, 2));
+  if (!v.ok) process.exit(1);
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const cmd = args._[0];
   if (cmd === 'init') return cmdInit(args);
   if (cmd === 'check') return cmdCheck(args);
   if (cmd === 'audit') return cmdAudit(args);
-  console.error('usage: spendguard <init|check|audit> [options]');
+  if (cmd === 'keygen') return cmdKeygen(args);
+  if (cmd === 'receipt-verify') return cmdReceiptVerify(args);
+  console.error('usage: spendguard <init|check|audit|keygen|receipt-verify> [options]');
   console.error('  init  [--policy policy.json] [--force]');
   console.error('  check --agent <id> --to <address> --amount <usd> [--policy p] [--log l]');
   console.error('  audit [--agent <id>] [--policy p] [--log l]');
+  console.error('  keygen [--pub agent.ed25519.pub] [--priv agent.ed25519] [--force]');
+  console.error('  receipt-verify <receipt.json> --pubkey <public.pem> [--log audit.log]');
   process.exit(1);
 }
 

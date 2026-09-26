@@ -13,6 +13,7 @@ AI agents can now hold wallets and pay for things over x402 — data, APIs, comp
 - **Tamper-evident audit trail** — every decision (including blocked ones) appended to JSONL, each line hash-chained to the previous with sha256.
 - **Framework-agnostic middleware** — `guardedPay(policy, paymentFn)` wraps any x402 payment function. Deny/needs-approval throws before the payment function ever runs. Fail-closed by design.
 - **CLI** — scaffold policies, dry-run decisions, inspect and verify the trail.
+- **Attestation (v0.2)** — signed Ed25519 receipts for agent actions. Anyone with the agent's public key can verify what an agent did, offline. See [ATTESTATION.md](./ATTESTATION.md).
 
 Zero dependencies. Node stdlib only (`node:test` for tests). Local-only — it makes no network calls except the ones *your* payment function makes.
 
