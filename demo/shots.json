@@ -1,0 +1,176 @@
+{
+  "scene1": {
+    "cmd": "$ node demo/attack.js",
+    "comment": "# rogue loop: 25 payments of $5, as fast as it can go",
+    "lines": [
+      {
+        "n": 1,
+        "status": "ALLOW",
+        "text": "#01  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 2,
+        "status": "ALLOW",
+        "text": "#02  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 3,
+        "status": "ALLOW",
+        "text": "#03  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 4,
+        "status": "ALLOW",
+        "text": "#04  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 5,
+        "status": "ALLOW",
+        "text": "#05  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 6,
+        "status": "ALLOW",
+        "text": "#06  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 7,
+        "status": "ALLOW",
+        "text": "#07  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 8,
+        "status": "ALLOW",
+        "text": "#08  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 9,
+        "status": "ALLOW",
+        "text": "#09  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 10,
+        "status": "ALLOW",
+        "text": "#10  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 11,
+        "status": "ALLOW",
+        "text": "#11  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 12,
+        "status": "ALLOW",
+        "text": "#12  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 13,
+        "status": "ALLOW",
+        "text": "#13  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 14,
+        "status": "ALLOW",
+        "text": "#14  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 15,
+        "status": "ALLOW",
+        "text": "#15  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 16,
+        "status": "ALLOW",
+        "text": "#16  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 17,
+        "status": "ALLOW",
+        "text": "#17  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 18,
+        "status": "ALLOW",
+        "text": "#18  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 19,
+        "status": "ALLOW",
+        "text": "#19  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 20,
+        "status": "ALLOW",
+        "text": "#20  $5.00 -> 0x7f3a..c91e   [ALLOW]"
+      },
+      {
+        "n": 21,
+        "status": "DENIED",
+        "text": "#21  $5.00 -> 0x7f3a..c91e   [DENIED] velocity freeze: 20 payments in the last 60s hit the limit of 20"
+      },
+      {
+        "n": 22,
+        "status": "DENIED",
+        "text": "#22  $5.00 -> 0x7f3a..c91e   [DENIED] velocity freeze: 21 payments in the last 60s hit the limit of 20"
+      },
+      {
+        "n": 23,
+        "status": "DENIED",
+        "text": "#23  $5.00 -> 0x7f3a..c91e   [DENIED] velocity freeze: 22 payments in the last 60s hit the limit of 20"
+      }
+    ],
+    "freezeReason": "velocity freeze: 20 payments in the last 60s hit the limit of 20 — agent frozen until the window passes",
+    "checkCmd": "$ ./bin/spendguard check --agent scraper-01 --to 0x7f3a..c91e --amount 5",
+    "checkOut": "{\n  \"decision\": \"deny\",\n  \"reasons\": [\n    \"velocity freeze: 23 payments in the last 60s hit the limit of 20 — agent frozen until the window passes\"\n  ],\n  \"usage\": {\n    \"day\": 100,\n    \"week\": 100,\n    \"month\": 100,\n    \"velocity\": 23,\n    \"mission\": 0\n  }\n}"
+  },
+  "scene2": {
+    "cmd": "$ node demo/pay.js",
+    "heldLine": "$150.00 -> 0x9be2..0987   [HELD] needs_approval — queued as 1cea41cb..",
+    "queueCmd": "$ ./bin/spendguard queue",
+    "queueOut": "1cea41cbeab25ad4  2026-09-26T19:34:49.880Z  treasurer-01  -> 0x9be244aa7712cc05d1e88f3a6b4d20987  $150  [amount $150 exceeds approval threshold of $100 — human approval required]",
+    "approveCmd": "$ ./bin/spendguard approve 1cea41cb..",
+    "approveOut": "approved 1cea41cbeab25ad4: treasurer-01 -> 0x9be244aa7712cc05d1e88f3a6b4d20987 $150\nrecorded in the audit trail (decision: approved). execute via your payment pipeline:\n{\"agentId\":\"treasurer-01\",\"to\":\"0x9be244aa7712cc05d1e88f3a6b4d20987\",\"amountUsd\":150,\"missionId\":null}",
+    "auditCmd": "$ ./bin/spendguard audit --agent treasurer-01",
+    "auditOut": "2026-09-26T19:34:50.044Z  treasurer-01  -> 0x9be244aa7712cc05d1e88f3a6b4d20987  $150  approved  [approved from queue 1cea41cbeab25ad4 by operator — execute via your payment pipeline]\n\nOK: 25 records, chain intact",
+    "queueId": "1cea41cbeab25ad4"
+  },
+  "scene3": {
+    "cmd": "$ node demo/mission.js --mission research-07",
+    "envelope": "mission envelope: $50.00  ·  agent researcher-01",
+    "lines": [
+      {
+        "n": 1,
+        "status": "ALLOW",
+        "text": "$10.00 -> 0xdata..dd55   [ALLOW]  envelope $10/$50"
+      },
+      {
+        "n": 2,
+        "status": "ALLOW",
+        "text": "$10.00 -> 0xdata..dd55   [ALLOW]  envelope $20/$50"
+      },
+      {
+        "n": 3,
+        "status": "ALLOW",
+        "text": "$10.00 -> 0xdata..dd55   [ALLOW]  envelope $30/$50"
+      },
+      {
+        "n": 4,
+        "status": "ALLOW",
+        "text": "$10.00 -> 0xdata..dd55   [ALLOW]  envelope $40/$50"
+      },
+      {
+        "n": 5,
+        "status": "ALLOW",
+        "text": "$10.00 -> 0xdata..dd55   [ALLOW]  envelope $50/$50"
+      },
+      {
+        "n": 6,
+        "status": "DENIED",
+        "text": "$5.00 -> 0xdata..dd55   [DENIED] mission budget exhausted"
+      }
+    ],
+    "missionReason": "mission budget exhausted: mission research-07 cap of $50 (already spent $50, this tx $5)",
+    "checkCmd": "$ ./bin/spendguard check --agent researcher-01 --amount 5 --mission research-07",
+    "checkOut": "{\n  \"decision\": \"deny\",\n  \"reasons\": [\n    \"mission budget exhausted: mission research-07 cap of $50 (already spent $50, this tx $5)\"\n  ],\n  \"usage\": {\n    \"day\": 50,\n    \"week\": 50,\n    \"month\": 50,\n    \"velocity\": 6,\n    \"mission\": 50\n  }\n}"
+  }
+}
