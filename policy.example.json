@@ -1,1 +1,27 @@
-{"agents":{"researcher-02":{"allowlist":["0xf27a01b3e5a4fe823ea771a4815d0974bf216717"]},"scraper-01":{"approvalThreshold":25,"dailyCap":10,"perTxCap":5}},"defaults":{"allowlist":[],"approvalThreshold":100,"dailyCap":50,"denylist":[],"monthlyCap":500,"perTxCap":25,"weeklyCap":200},"version":1}
+{
+  "agents": {
+    "researcher-02": {
+      "allowlist": [
+        "0xf27a01b3e5a4fe823ea771a4815d0974bf216717"
+      ]
+    },
+    "scraper-01": {
+      "approvalThreshold": 25,
+      "dailyCap": 10,
+      "perTxCap": 5
+    }
+  },
+  "defaults": {
+    "allowlist": [],
+    "approvalThreshold": 100,
+    "dailyCap": 50,
+    "denylist": [],
+    "monthlyCap": 500,
+    "perTxCap": 25,
+    "weeklyCap": 200,
+    "velocityMax": 20,
+    "velocityWindowSec": 60,
+    "missionCap": null
+  },
+  "version": 1
+}

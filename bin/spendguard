@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 'use strict';
-// spendguard CLI: init | check | audit | keygen | receipt-verify
-//   init  — scaffold a policy.json in the current directory
-//   check — dry-run a payment decision (does NOT write to the audit trail)
-//   audit — read the trail, optionally filtered by agent, and verify integrity
-//   keygen — generate an Ed25519 keypair for signing receipts (private key stays local)
+// spendguard CLI: init | check | audit | queue | approve | deny | keygen | receipt-verify
+//   init    — scaffold a policy.json in the current directory
+//   check   — dry-run a payment decision (does NOT write to the audit trail)
+//   audit   — read the trail, optionally filtered by agent, and verify integrity
+//   queue   — list payments held for human approval
+//   approve — record a human approval for a queued payment (execution stays in
+//             your payment pipeline — the CLI never moves money it cannot see)
+//   deny    — deny a queued payment and discard it
+//   keygen  — generate an Ed25519 keypair for signing receipts (private key stays local)
 //   receipt-verify — verify a signed attestation receipt against a public key
 const fs = require('node:fs');
 const path = require('node:path');
@@ -12,6 +16,7 @@ const { loadPolicy, effectivePolicy, DEFAULTS } = require('../lib/policy');
 const { decide } = require('../lib/decide');
 const audit = require('../lib/audit');
 const attest = require('../lib/attest');
+const queueLib = require('../lib/queue');
 
 const EXIT = { allow: 0, deny: 1, needs_approval: 2 };
 
@@ -33,6 +38,12 @@ function parseArgs(argv) {
     }
   }
   return out;
+}
+
+function resolvePaths(args) {
+  const logPath = path.resolve(args.log || './audit.log');
+  const queuePath = path.resolve(args.queue || queueLib.defaultQueuePath(logPath));
+  return { logPath, queuePath };
 }
 
 function cmdInit(args) {
@@ -61,14 +72,19 @@ function cmdCheck(args) {
   const to = args.to;
   const amountUsd = Number(args.amount);
   if (!agentId || !to || args.amount === undefined) {
-    console.error('usage: spendguard check --agent <id> --to <address> --amount <usd> [--policy policy.json] [--log audit.log]');
+    console.error('usage: spendguard check --agent <id> --to <address> --amount <usd> [--mission <id>] [--policy policy.json] [--log audit.log]');
     process.exit(1);
   }
   const policy = loadPolicy(path.resolve(args.policy || './policy.json'));
   const logPath = path.resolve(args.log || './audit.log');
+  const missionId = args.mission || undefined;
   const eff = effectivePolicy(policy, agentId);
-  const usage = audit.usageFor(agentId, logPath);
-  const { decision, reasons } = decide({ agentId, to, amountUsd }, eff, usage);
+  const usage = {
+    ...audit.usageFor(agentId, logPath),
+    velocity: audit.velocityFor(agentId, logPath, eff.velocityWindowSec),
+    mission: audit.missionUsageFor(agentId, missionId, logPath),
+  };
+  const { decision, reasons } = decide({ agentId, to, amountUsd, missionId }, eff, usage);
   console.log(JSON.stringify({ decision, reasons, usage }, null, 2));
   process.exit(EXIT[decision]);
 }
@@ -77,11 +93,61 @@ function cmdAudit(args) {
   const logPath = path.resolve(args.log || './audit.log');
   const records = audit.readRecords(logPath).filter((r) => !args.agent || r.agentId === args.agent);
   for (const r of records) {
-    console.log(`${r.ts}  ${r.agentId}  -> ${r.to}  $${r.amountUsd}  ${r.decision}${r.reasons.length ? '  [' + r.reasons.join('; ') + ']' : ''}`);
+    const mission = r.missionId ? ` [${r.missionId}]` : '';
+    console.log(`${r.ts}  ${r.agentId}${mission}  -> ${r.to}  $${r.amountUsd}  ${r.decision}${r.reasons.length ? '  [' + r.reasons.join('; ') + ']' : ''}`);
   }
   const v = audit.verify(logPath);
   console.log(`\n${v.ok ? 'OK' : 'FAIL'}: ${v.count} records, chain ${v.ok ? 'intact' : 'BROKEN at line ' + (v.badIndex + 1) + ' (' + v.reason + ')'}`);
   if (!v.ok) process.exit(1);
+}
+
+function cmdQueue(args) {
+  const { queuePath } = resolvePaths(args);
+  const entries = queueLib.list(queuePath);
+  if (!entries.length) {
+    console.log('queue empty — no payments awaiting approval');
+    return;
+  }
+  for (const e of entries) {
+    const mission = e.missionId ? ` [${e.missionId}]` : '';
+    console.log(`${e.id}  ${e.ts}  ${e.agentId}${mission}  -> ${e.to}  $${e.amountUsd}  [${e.reasons.join('; ')}]`);
+  }
+}
+
+function cmdApprove(args) {
+  const id = args._[1];
+  if (!id) {
+    console.error('usage: spendguard approve <id> [--log audit.log] [--queue queue.json]');
+    process.exit(1);
+  }
+  const { logPath, queuePath } = resolvePaths(args);
+  let entry;
+  try {
+    entry = queueLib.recordApproval(queuePath, logPath, id);
+  } catch (e) {
+    console.error(e.message);
+    process.exit(1);
+  }
+  console.log(`approved ${id}: ${entry.agentId} -> ${entry.to} $${entry.amountUsd}`);
+  console.log('recorded in the audit trail (decision: approved). execute via your payment pipeline:');
+  console.log(JSON.stringify({ agentId: entry.agentId, to: entry.to, amountUsd: entry.amountUsd, missionId: entry.missionId }));
+}
+
+function cmdDeny(args) {
+  const id = args._[1];
+  if (!id) {
+    console.error('usage: spendguard deny <id> [--log audit.log] [--queue queue.json]');
+    process.exit(1);
+  }
+  const { logPath, queuePath } = resolvePaths(args);
+  let entry;
+  try {
+    entry = queueLib.deny(queuePath, logPath, id);
+  } catch (e) {
+    console.error(e.message);
+    process.exit(1);
+  }
+  console.log(`denied ${id}: ${entry.agentId} -> ${entry.to} $${entry.amountUsd} — discarded, recorded in the audit trail`);
 }
 
 function cmdKeygen(args) {
@@ -120,12 +186,18 @@ function main() {
   if (cmd === 'init') return cmdInit(args);
   if (cmd === 'check') return cmdCheck(args);
   if (cmd === 'audit') return cmdAudit(args);
+  if (cmd === 'queue') return cmdQueue(args);
+  if (cmd === 'approve') return cmdApprove(args);
+  if (cmd === 'deny') return cmdDeny(args);
   if (cmd === 'keygen') return cmdKeygen(args);
   if (cmd === 'receipt-verify') return cmdReceiptVerify(args);
-  console.error('usage: spendguard <init|check|audit|keygen|receipt-verify> [options]');
+  console.error('usage: spendguard <init|check|audit|queue|approve|deny|keygen|receipt-verify> [options]');
   console.error('  init  [--policy policy.json] [--force]');
-  console.error('  check --agent <id> --to <address> --amount <usd> [--policy p] [--log l]');
+  console.error('  check --agent <id> --to <address> --amount <usd> [--mission <id>] [--policy p] [--log l]');
   console.error('  audit [--agent <id>] [--policy p] [--log l]');
+  console.error('  queue [--log l] [--queue q]');
+  console.error('  approve <id> [--log l] [--queue q]');
+  console.error('  deny <id> [--log l] [--queue q]');
   console.error('  keygen [--pub agent.ed25519.pub] [--priv agent.ed25519] [--force]');
   console.error('  receipt-verify <receipt.json> --pubkey <public.pem> [--log audit.log]');
   process.exit(1);
